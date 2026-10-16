@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Static SSH: derive the macOS work root from the final `--static-user` flag instead of the default or config user, while explicit work roots and SSH users still win. [PR 2871](https://github.com/openclaw/crabbox/pull/2871). Thanks @holgergruenhagen.
 - Coordinator: read run-log previews from the latest chunks without scanning the full retained log. [PR 2869](https://github.com/openclaw/crabbox/pull/2869).
 - CI: stop aggregate checks when a run is cancelled while preserving failed dependency results, and check coverage producers before toolchain setup. [PR 2868](https://github.com/openclaw/crabbox/pull/2868).
 - Security: update the Incus client and HTTP/2 dependencies to address reachable advisories, and use Go 1.27.2 for builds while retaining the Go 1.26 module minimum.
