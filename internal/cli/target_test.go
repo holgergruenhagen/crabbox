@@ -645,6 +645,101 @@ func TestNormalizeTargetConfigWorkRoots(t *testing.T) {
 	}
 }
 
+func TestRunConfigStaticMacOSWorkRootFollowsStaticUserFlag(t *testing.T) {
+	staticMacOS := []string{"--provider", "ssh", "--target", "macos", "--static-host", "192.0.2.10"}
+	tests := []struct {
+		name     string
+		file     string
+		env      map[string]string
+		args     []string
+		wantUser string
+		wantRoot string
+	}{
+		{
+			name:     "flag user",
+			args:     append(staticMacOS, "--static-user", "alice"),
+			wantUser: "alice",
+			wantRoot: "/Users/alice/crabbox",
+		},
+		{
+			name:     "flag user over config user",
+			file:     "static:\n  user: bob\n",
+			args:     append(staticMacOS, "--static-user", "alice"),
+			wantUser: "alice",
+			wantRoot: "/Users/alice/crabbox",
+		},
+		{
+			name:     "flag user over environment user",
+			env:      map[string]string{"CRABBOX_STATIC_USER": "bob"},
+			args:     append(staticMacOS, "--static-user", "alice"),
+			wantUser: "alice",
+			wantRoot: "/Users/alice/crabbox",
+		},
+		{
+			name:     "flag user with config target",
+			file:     "target: macos\n",
+			args:     []string{"--provider", "ssh", "--static-host", "192.0.2.10", "--static-user", "alice"},
+			wantUser: "alice",
+			wantRoot: "/Users/alice/crabbox",
+		},
+		{
+			name:     "explicit SSH user still wins",
+			env:      map[string]string{"CRABBOX_SSH_USER": "builder"},
+			args:     append(staticMacOS, "--static-user", "alice"),
+			wantUser: "builder",
+			wantRoot: "/Users/builder/crabbox",
+		},
+		{
+			name:     "explicit work root still wins",
+			file:     "workRoot: /Users/bob/crabbox\n",
+			args:     append(staticMacOS, "--static-user", "alice"),
+			wantUser: "alice",
+			wantRoot: "/Users/bob/crabbox",
+		},
+		{
+			name:     "static work root flag still wins",
+			args:     append(staticMacOS, "--static-user", "alice", "--static-work-root", "/Volumes/build/crabbox"),
+			wantUser: "alice",
+			wantRoot: "/Volumes/build/crabbox",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearConfigEnv(t)
+			dir := t.TempDir()
+			t.Setenv("HOME", dir)
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, ".config"))
+			t.Setenv("CRABBOX_CONFIG", filepath.Join(dir, ".crabbox.yaml"))
+			if tt.file != "" {
+				if err := os.WriteFile(filepath.Join(dir, ".crabbox.yaml"), []byte(tt.file), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for name, value := range tt.env {
+				t.Setenv(name, value)
+			}
+			fs := newFlagSet("run", io.Discard)
+			flags := registerRunFlags(fs, defaultConfig(), ordinaryLeaseCreateFlagRegistrationOptions())
+			if err := parseFlags(fs, tt.args); err != nil {
+				t.Fatal(err)
+			}
+
+			cfg, err := loadRunConfig(fs, flags, leaseFlagTarget{}, false, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if cfg.SSHUser != tt.wantUser {
+				t.Fatalf("SSHUser=%q want %q", cfg.SSHUser, tt.wantUser)
+			}
+			if cfg.WorkRoot != tt.wantRoot {
+				t.Fatalf("WorkRoot=%q want %q", cfg.WorkRoot, tt.wantRoot)
+			}
+		})
+	}
+}
+
 func TestNormalizeTargetConfigUsesSealosWorkRoot(t *testing.T) {
 	cfg := baseConfig()
 	cfg.Provider = "sealos-devbox"
